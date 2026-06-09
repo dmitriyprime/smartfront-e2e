@@ -60,6 +60,28 @@ them when verifying data:
 - The questionnaire is shown only to **logged-in** users using the prescription
   service — never to all site visitors (ticket 73).
 
+### Scenario B vs Scenario C — how they differ
+
+These two groups **converged after ticket 83**. Originally a product selection in
+Scenario B granted *immediate* PLP access while Scenario C did not proceed at all.
+Now a "previously recommended" selection is no longer auto-shown on the PLP — it is
+emailed to orders@skinstation for clinical review, which is almost exactly what
+Scenario C already did. Both now end in clinical review with **no immediate access**.
+
+| Dimension | Scenario B (no history, **with** selection) | Scenario C (no history, **no** selection) |
+| :--- | :--- | :--- |
+| Patient selects products | Yes (`previously_recommended_products` populated) | No |
+| Blue box (`consent_to_callback`) | Not the trigger | **Required** — must tick to save |
+| Email trigger | Automatic on submit (products indicated) | Ticking the blue box |
+| Email content | Questionnaire + requested product list | Questionnaire only |
+| Immediate PLP access | No | No |
+| Route to access | Clinical reviews indicated products → adds SKUs | Clinical calls patient, recommends → adds SKUs |
+
+**Bottom line:** the difference is whether the patient hands the clinical team a
+starting list of products, and the email trigger mechanism (automatic on submit vs.
+the mandatory blue-box tick). The old "instant PLP access in Scenario B" difference no
+longer exists post-ticket-83.
+
 ---
 
 ## Group 1 — Patient WITH previous prescription product orders (Scenario A)
@@ -108,9 +130,14 @@ them when verifying data:
   1. Deselect/leave unselected all previously used products.
   2. Also make no previously-recommended selection.
   3. Attempt to submit / proceed.
-- **Expected Result:** System does not proceed to the PLP with an empty selection.
-  Patient is routed to the edge-case path (consent_to_callback / blue box save + email
-  — see Group 3), consistent with "no products selected".
+- **Expected Result:** With zero products selected there is nothing to carry forward,
+  so the PLP cannot be populated from this selection.
+  **⚠️ Open question — needs client clarification (Tim Sebire / Jess Lewis):** What the
+  system should do *next* for a patient who **has prescription history** but selects
+  none of their pre-filled products is **not defined** in the scope doc or tickets
+  73/77/79/83. Note that ticket 79's edge-case email path fires only when the patient
+  has **no previous prescriptions**, so it does not cleanly apply to a Group-1 patient.
+  Do not assume routing to the Scenario C path until this is confirmed.
 
 ### G1-TC06 — Prices hidden in the questionnaire
 - **Priority:** P1
@@ -142,14 +169,16 @@ them when verifying data:
 - **Expected Result:** The single CTA reads **"Request Repeat Prescription"** — never
   "Add to Cart" / "Add to Basket". The CTA leads to the cart/basket flow.
 
-### G1-TC10 — PLP re-confirmation via basket (prescription request) flow
+### G1-TC10 — PLP confirmation via the "Request Repeat Prescription" CTA
 - **Priority:** P1
 - **Preconditions:** Patient on the PLP with previously selected products.
 - **Steps:**
-  1. On the PLP, use "Request Repeat Prescription" to add selected products to the
-     prescription request (basket).
-- **Expected Result:** The patient re-confirms the products by adding them to the
-  prescription request; the basket reflects exactly the products confirmed.
+  1. On the PLP, click the **"Request Repeat Prescription"** CTA for the selected
+     products to add them to the basket (prescription request).
+- **Expected Result:** The patient confirms the products a second time by clicking
+  **"Request Repeat Prescription"** on the PLP, which adds them to the basket. This is
+  the second confirmation step after the initial selection in the questionnaire; the
+  basket reflects exactly the products confirmed.
 
 ### G1-TC11 — Edit Medical Questionnaire from the prescription listing page
 - **Priority:** P2
@@ -214,6 +243,9 @@ them when verifying data:
 ---
 
 ## Group 2 — Patient WITHOUT previous prescription product orders (Scenario B)
+
+> See **[Scenario B vs Scenario C](#scenario-b-vs-scenario-c--how-they-differ)** above
+> for how this group differs from Group 3.
 
 ### G2-TC01 — Previously used / prescribed section is empty
 - **Priority:** P1
@@ -322,6 +354,9 @@ them when verifying data:
 ---
 
 ## Group 3 — Edge case: no history + no selection (Scenario C)
+
+> See **[Scenario B vs Scenario C](#scenario-b-vs-scenario-c--how-they-differ)** above
+> for how this group differs from Group 2.
 
 > **Trigger (ticket 79):** the edge-case path applies when the patient has **no
 > previous prescriptions**, indicates **no previously used products**, and indicates

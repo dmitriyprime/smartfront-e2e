@@ -288,6 +288,45 @@ longer exists post-ticket-83.
   assigned products, with the **"Edit Medical Questionnaire"** option available (see
   G1-TC11). The patient is not forced back through the full questionnaire first.
 
+### G1-TC17 — Photo upload flow: temporary `Photo` metafield → order → S3 → `Photos`
+
+- **Priority:** P2
+- **Preconditions:** Logged-in patient on `pages/questionnaire`. Access to the customer's
+  questionnaire data in admin and/or via the `?read=1` app-proxy endpoint.
+- **Steps:**
+  1. On the form, select a photo and click **Save** (do **not** place an order yet).
+  2. Inspect the questionnaire data in admin / via `?read=1`.
+  3. Place a prescription order so the order webhook fires.
+  4. Re-inspect the questionnaire data and reopen the form.
+- **Expected Result:**
+  - After save (before any order): the photo is held in the temporary **`Photo`**
+    metafield, and the **`Photos`** metafield is still **empty** — the file is **not** yet
+    uploaded to AWS S3 (by design — S3 uploads are deferred so forms saved without an order
+    do not push files to S3; Serhii).
+  - After order placement: the webhook uploads the file to **AWS S3**, a **relative link**
+    is written to **`Photos`**, and the photo is then **displayed** in the "Previously
+    uploaded photos" section on the form.
+  - This is the positive **retest path for [ISSUE-3](#issue-3--previously-uploaded-photos-section-does-not-display-the-customers-uploaded-photos-after-submit)**.
+
+### G1-TC18 — "Previously recommended" block excludes already-prescribed products
+
+- **Priority:** P1
+- **Preconditions:** Existing patient with **≥1** product listed in **Previous
+  Prescriptions**. On the questionnaire, **Radio 2** ("Are you currently using medical
+  skincare treatment for your concern?") = **yes**, so the "Previously recommended
+  products" block is shown.
+- **Steps:**
+  1. Open the questionnaire and note the products listed in the **Previous Prescriptions**
+     section.
+  2. View the **Previously recommended products** (POM) checkboxes.
+  3. Compare the two lists.
+- **Expected Result:** The "Previously recommended products" block shows all POM products
+  sold on the site **excluding** those already listed in **Previous Prescriptions** — i.e.
+  **no product appears in both sections** (Tim Sebire's rule, verified here on a patient who
+  actually has prescription history). None of the checkboxes are pre-selected (see
+  G1-TC01). This complements G2-TC02, which checks the same rule for a patient without
+  history.
+
 ---
 
 ## Group 2 — Patient WITHOUT previous prescription product orders (Scenario B)
@@ -672,6 +711,8 @@ Defects and open questions surfaced during testing. Severity: 🔴 high / 🟠 m
   so this leans toward a save/storage issue rather than a pure rendering issue. Confirm
   with the dev where uploaded photos are stored and why `photos` is empty despite
   `photo_last_uploaded_at` being set. Related to ISSUE-4 (broken images).
+- **Positive retest case:** [G1-TC17](#g1-tc17--photo-upload-flow-temporary-photo-metafield--order--s3--photos)
+  — verify the `Photo` → order → S3 → `Photos` flow end to end.
 
 ### ISSUE-4 — "Previously uploaded photos" shows broken images for an existing customer
 
@@ -806,5 +847,19 @@ Summary of the clarified behavior and the corresponding edits made to this docum
   Prescriptions" mandatory when Radio 1 = yes? Not addressed by the current fix.
 - **Retests pending:** ISSUE-2, ISSUE-3 (with order), ISSUE-4 (new photos), ISSUE-5 /
   G3-TC04, G2-TC14.
+
+### 2026-06-16 — Coverage additions
+
+- **Photo vs Photos clarified (Serhii, `additional_questions.md`).** The questionnaire has
+  **two** photo metafields: **`Photo`** is a temporary holder written when the patient saves
+  the form (file kept in Shopify, **not** yet on S3); **`Photos`** receives a relative S3
+  link **only at order placement**, when the order webhook uploads the file to AWS S3. The
+  photo shown in "Previously uploaded photos" comes from `Photos`, so it is empty until an
+  order is placed (this is the by-design explanation behind ISSUE-3).
+- **G1-TC17 (new)** — positive happy-path for the photo flow above (`Photo` → order → S3 →
+  `Photos` → displayed); serves as the retest case for ISSUE-3, now cross-linked from it.
+- **G1-TC18 (new)** — verifies the "Previously recommended" block **excludes** already-
+  prescribed products for an **existing** patient (the Group 1 counterpart to G2-TC02,
+  where the exclusion actually has products to act on).
 
 

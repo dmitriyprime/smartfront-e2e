@@ -46,19 +46,19 @@ SELECT COUNT(*) FROM images WHERE remote_path LIKE '%middleby%';   -- 171, all `
 | § | Requirement | On stage | On dev | Notes |
 |---|---|---|---|---|
 | 1 | Feature Photos merged with AQ | ✅ | ✅ | both read `PhotoFeature` |
-| 1 | Alternate Photos (`PhotoAlt`) | ❌ | ✅ | stage never requests the attribute; dev merges it in `updatePictures()` |
-| 1 | Marketing videos (`VideoFeature`) | ❌ | ✅ | dev derives `mediaType` from the file extension (`mp4`, `webm`) |
-| 1 | 3D assets | ❌ | ❌ | not implemented on either branch — no attribute is read |
-| 1 | Stable media ids (no duplication) | ❌ | ✅ | dev: `mb_p_<slug>` / `mb_v_<slug>` (`06ec03c1f`); stage: `image<timestamp>` |
-| 2 | Keep first 3 AQ spec groups, replace the rest | ❌ | ❌ | stage copies a flat list of ~45 attributes. dev copies 6 named groups and attaches a `group` key (`d8326101c`), **but that key is discarded on save** — `Option::saveProduct()` reads only `property` and `value`, `Modules/Product/app/Repositories/Product/Option.php` is byte-identical on both branches, and `product_options` / `product_option_values` have no group column (verified on `oners_stage`). No migration on `dev` adds one. Implementing §2 requires a schema + repository change, not just a promotion |
+| 1 | Alternate Photos (`PhotoAlt`) | 🔴 | ✅ | stage never requests the attribute; dev merges it in `updatePictures()` |
+| 1 | Marketing videos (`VideoFeature`) | 🔴 | ✅ | dev derives `mediaType` from the file extension (`mp4`, `webm`) |
+| 1 | 3D assets | 🔴 | 🔴 | not implemented on either branch — no attribute is read |
+| 1 | Stable media ids (no duplication) | 🔴 | ✅ | dev: `mb_p_<slug>` / `mb_v_<slug>` (`06ec03c1f`); stage: `image<timestamp>` |
+| 2 | Keep first 3 AQ spec groups, replace the rest | 🔴 | 🔴 | stage copies a flat list of ~45 attributes. dev copies 6 named groups and attaches a `group` key (`d8326101c`), **but that key is discarded on save** — `Option::saveProduct()` reads only `property` and `value`, `Modules/Product/app/Repositories/Product/Option.php` is byte-identical on both branches, and `product_options` / `product_option_values` have no group column (verified on `oners_stage`). No migration on `dev` adds one. Implementing §2 requires a schema + repository change, not just a promotion |
 | 3 | Import only **missing** certifications | ✅ | ✅ | dev reads the `regulation_compliance_certifications` group; stage reads the `product_certifications` attribute |
-| 3 | Robust when AQ has no certifications | ❌ | ❌ | `in_array($label, $aqProductData['certifications'])` has no null guard on **either** branch — see TC-MBS-09 |
-| 4 | Replace AQ warranty with MiddleBy warranty | ❌ | ✅ | **two separate gaps on stage.** (a) mapper: no `copyWarrantyByGroup()` — `grep -rni warrant Modules/ImportMiddleBy/` is empty; dev builds `warranties[]` from `warranty_and_disclaimers_attribute_group`. (b) persistence: `app/Models/Product/Updater.php` on stage contains no `warranty`/`warranties` at all, while dev formats them at lines 196–215 and writes `products.warranty` at line 341. Porting only the mapper would silently drop the data |
+| 3 | Robust when AQ has no certifications | 🔴 | 🔴 | `in_array($label, $aqProductData['certifications'])` has no null guard on **either** branch — see TC-MBS-09 |
+| 4 | Replace AQ warranty with MiddleBy warranty | 🔴 | ✅ | **two separate gaps on stage.** (a) mapper: no `copyWarrantyByGroup()` — `grep -rni warrant Modules/ImportMiddleBy/` is empty; dev builds `warranties[]` from `warranty_and_disclaimers_attribute_group`. (b) persistence: `app/Models/Product/Updater.php` on stage contains no `warranty`/`warranties` at all, while dev formats them at lines 196–215 and writes `products.warranty` at line 341. Porting only the mapper would silently drop the data |
 | 5 | Replace AQ PDFs with MiddleBy PDFs | ⚠️ partial | ✅ | stage **appends**; dev drops AQ documents of the same `mediaType` via `array_filter` before merging |
-| 5 | All 5 document types | ❌ 3 of 5 | ✅ 5 of 5 | stage: CutSheet, User Manual, Brochure. dev adds `Parts_List` and `warranty_sheet` |
+| 5 | All 5 document types | 🔴 3 of 5 | ✅ 5 of 5 | stage: CutSheet, User Manual, Brochure. dev adds `Parts_List` and `warranty_sheet` |
 | — | Fallback to AQ when no match / no content | ✅ | ✅ | guard clauses in every `update*` method |
 
-> **Cases marked ❌ / ⚠️ below are expected to fail on stage.** They are included so QA can confirm
+> **Cases marked 🔴 / ⚠️ below are expected to fail on stage.** They are included so QA can confirm
 > the gap rather than re-discover it, and so the same document can be re-run after `dev` is promoted.
 > Do **not** raise them as new bugs — reference this table instead.
 
@@ -108,8 +108,8 @@ AutoQuote::getProduct()            app/Traits/AutoQuote.php:97
 
 | Trigger | Products / options | Certifications | Images | **Documents** |
 |---|---|---|---|---|
-| `php artisan product:import --product_id=<id>` | ✅ | ✅ | ✅ | ❌ |
-| `php artisan product:images --product_id=<id>` | ❌ | ❌ | ✅ | ❌ |
+| `php artisan product:import --product_id=<id>` | ✅ | ✅ | ✅ | 🔴 |
+| `php artisan product:images --product_id=<id>` | 🔴 | 🔴 | ✅ | 🔴 |
 | Vendors → **Update** (full vendor import) | ✅ | ✅ | ✅ | ✅ |
 
 **`updateByProduct()` ends with `//TODO: update pdf`** (`app/Models/Product/Updater.php:184`) —
@@ -198,10 +198,15 @@ Only **6 vendors** have MiddleBy mappings on stage (218 rows in
   (`middleby-cdn.com/PhotoFeature/…`) images are linked — AQ images are not removed.
 - Baseline: 7 images = 1 AQ + 6 MiddleBy.
 
+> If the MiddleBy image count looks lower than the API reports, do **not** raise a bug before
+> checking the two causes listed under **TC-MBS-16** — a file published after the last import, or a
+> product AQ no longer lists. A sweep of all 151 mapped uuids found no code defect behind any of the
+> seven discrepancies.
+
 ---
 
 ### TC-MBS-02 — Alternate photos (`PhotoAlt`)
-**Covers:** task §1. **❌ Expected to FAIL on stage — gap, not a new bug.**
+**Covers:** task §1. **🔴 Expected to FAIL on stage — gap, not a new bug.**
 
 **Steps**
 ```sql
@@ -218,7 +223,7 @@ Cross-check that the source data does contain them:
 ---
 
 ### TC-MBS-03 — Marketing videos (`VideoFeature`)
-**Covers:** task §1. **❌ Expected to FAIL on stage.**
+**Covers:** task §1. **🔴 Expected to FAIL on stage.**
 
 **Steps**
 ```sql
@@ -232,7 +237,7 @@ to `'picture'` for every item.
 ---
 
 ### TC-MBS-04 — 3D / interactive assets
-**Covers:** task §1 (*when available*). **❌ Not implemented on stage.**
+**Covers:** task §1 (*when available*). **🔴 Not implemented on stage.**
 
 **Steps** — inspect a raw payload for an interactive-asset block:
 ```bash
@@ -295,6 +300,45 @@ Reference product **666040** (`2028_IPC-14_LP`, Imperial), uuid `60a8609e-e79e-4
 
 **Expected per task:** every media item present in the payload is linked to the product.
 **Actual on stage:** `feature` matches, `alternate` and `video` are `0` — see TC-MBS-02/03.
+
+> ### ⚠️ A PhotoFeature count lower than the API is usually **stale data**, not a defect
+>
+> A full sweep of all 151 mapped MiddleBy uuids on 2026-08-02 compared the API against the DB:
+> **171 of 178 products matched exactly, 0 had extras, 7 had fewer.** All seven were explained
+> without any code defect — re-importing the vendor fixed 12 of the 22 missing files immediately.
+>
+> Rule out these two causes **before** raising a bug:
+>
+> **1. The file was published after the last import.** MiddleBy URLs carry `?update_date=<unix ts>`.
+> Compare it with `vendors.downloaded_at`:
+> ```sql
+> SELECT id, name, downloaded_at FROM vendors WHERE id = <vendor_id>;
+> ```
+> ```bash
+> # publication date of each PhotoFeature file
+> php artisan middleby:get:product <uuid> \
+>   | grep -oE 'PhotoFeature/[^"]*update_date=[0-9]+' \
+>   | sed -E 's/.*update_date=//' | while read t; do date -d @$t '+%Y-%m-%d'; done
+> ```
+> Worked example: Evo products 397034 / 397047 held 1 of 7 images. Six were published
+> **2026-05-28**, the vendor was last imported **2026-02-13**. After re-import both jumped to 7 of 7.
+>
+> **2. The product is no longer in the AutoQuotes catalogue.** The import walks the AQ vendor list,
+> so a product AQ has dropped is never reached — its `products.updated_at` stays at the old date
+> even after a successful vendor import:
+> ```bash
+> curl -s -H 'ocp-apim-subscription-key: <key from app/Traits/AutoQuote.php>' \
+>   'https://api.aq-fes.com/products-api/manufacturers/<vendor external_id>/products' \
+>   | jq --arg m '<model>' '[.data[] | select(.models.mfrModel == $m)] | length'   # 0 → dropped by AQ
+> ```
+> Worked example: product **896451** (`11530_10-7112-OC`) stayed at 1 of 7 after the re-import.
+> The Evo list in AQ holds 19 products and this model is not among them, while MiddleBy still
+> publishes 7 PhotoFeature files for it. Such a product can never be refreshed until AQ lists it again.
+>
+> Useful side note: `net_suite_status` is **not** a "discontinued" flag —
+> `1 = Not Exist, 2 = Error, 3 = Not Updated (pending), 4 = Ready`
+> (`app/Models/Product/Source/NetSuiteStatus.php`). Products touched by an import move to `3`;
+> an untouched one keeps `4`. Do not read `4` as "discontinued".
 
 ---
 
@@ -472,7 +516,7 @@ change in the AQ contract. The same guard is missing on `dev`.
 ## 4. Warranty
 
 ### TC-MBS-10 — AQ warranty replaced by MiddleBy warranty
-**Covers:** task §4. **❌ Expected to FAIL — not implemented on stage.**
+**Covers:** task §4. **🔴 Expected to FAIL — not implemented on stage.**
 
 ### Worked example — product 611510 on stage
 
@@ -661,8 +705,8 @@ Walk each named type and record whether a MiddleBy document of that kind reaches
 | Specification Sheet | `Spec_Sheets` | ✅ | ✅ | `cutsheet` |
 | User Manual | `User_Manuals` | ✅ | ✅ | `manual` |
 | Brochure | `Brochure` | ✅ | ✅ | `brochure` |
-| **Parts List** | `Parts_List` | ❌ | ✅ | `cutsheet` (default) |
-| **Warranty Sheet** | `warranty_sheet` | ❌ | ✅ | `warrantysheet` |
+| **Parts List** | `Parts_List` | 🔴 | ✅ | `cutsheet` (default) |
+| **Warranty Sheet** | `warranty_sheet` | 🔴 | ✅ | `warrantysheet` |
 
 **Measured on product 611510 (2026-08-02).** MiddleBy supplies **all five** types for it —
 confirmed against the API (`GET {base_url}/products/829693a9-…`):
@@ -682,8 +726,8 @@ What actually arrives:
 | Specification Sheet | ✅ `Middleby CutSheet` | ✅ |
 | User Manual | ✅ ×2 | ✅ ×2 |
 | Brochure | ✅ `Middleby Brochure` | ✅ |
-| **Parts List** | ❌ | ✅ |
-| **Warranty Sheet** | ❌ | ✅ |
+| **Parts List** | 🔴 | ✅ |
+| **Warranty Sheet** | 🔴 | ✅ |
 
 > Document titles differ by branch: stage takes `documents.title` from the hardcoded
 > `MIDDLE_BY_PRODUCT_DOCUMENTS` constant, so both manuals show as *"Middleby User Manual"* and are
@@ -739,6 +783,50 @@ A Parts List therefore lands as `cutsheet` and will *replace* the AQ spec sheet 
 - Nothing is lost. `getMiddleByProductData()` returns `null` when the API search finds no uuid,
   and `mapProduct()` is never called.
 - No rows added to `autoquote_middleby_product_mappings` for that model.
+
+**Measured on stage 2026-08-02** — after import `log_id=7533`, Blodgett has 639 products of which
+only 18 are mapped, so 621 exercised this path:
+
+| check | result |
+|---|---|
+| unmapped products with MiddleBy images | **0** ✅ |
+| unmapped products retaining AQ images | 573 |
+| unmapped products retaining AQ documents | 548 |
+| unmapped products with a MiddleBy document | 1 ⚠️ — see below |
+
+```sql
+SELECT COUNT(*) FROM products p
+WHERE p.vendor_id = 81
+  AND NOT EXISTS (SELECT 1 FROM autoquote_middleby_product_mappings m
+                  WHERE m.mfrId = '6bc8e7a0-be0d-dd11-a23a-00304834a8c9'
+                    AND p.model LIKE CONCAT(m.mfrModel, '%'))
+  AND EXISTS (SELECT 1 FROM image_product ip JOIN images i ON i.id = ip.image_id
+              WHERE ip.product_id = p.id AND i.remote_path LIKE '%middleby-cdn.com%');
+-- expect 0
+```
+
+> ⚠️ **Known outlier — do not raise as a bug.** Product **18713** (`1048_PRSS-20`) has the MiddleBy
+> brochure `Blodgett_Invoq_ConvectionOven_Brochure_1.pdf` without being mapped. It shares the
+> AutoQuotes `external_id` `4de7fc0b-238b-4020-86b8-2de99d463c54` with product **1488001**
+> (`1048_R1013`), which is mapped — AQ renamed the model and kept the identifier, leaving FEDA with
+> both the discontinued and the active record (`net_suite_status` 4 and 1).
+>
+> `Document\Handler::saveDocuments()` (`app/Models/Product/Document/Handler.php:117`) matches
+> documents by **`remote_path`** and links them to every product sharing that `external_id`:
+> ```php
+> $documentModel = Document::where(['remote_path' => $remoteDocumentPath])->first();
+> ...
+> $this->makeLinks($productModels, $documentModel->id);
+> ```
+> The enrichment itself never ran for PRSS-20 — `mapProduct()` was not called. This is the AQ
+> duplicate-identifier case documented in `ImageManager::createByApiProduct()`.
+>
+> When picking a product for this case, confirm it does **not** share `external_id` with a mapped
+> sibling:
+> ```sql
+> SELECT id, sku, model, external_id FROM products
+> WHERE external_id = (SELECT external_id FROM products WHERE id = <candidate>);
+> ```
 
 ---
 
@@ -833,17 +921,17 @@ current deployment actually delivers.
 | TC | Task § | Area | Expected on stage |
 |---|---|---|---|
 | TC-MBS-01 | §1 | Feature photos merged | ✅ pass |
-| TC-MBS-02 | §1 | Alternate photos | ❌ not implemented |
-| TC-MBS-03 | §1 | Marketing videos | ❌ not implemented |
-| TC-MBS-04 | §1 | 3D assets | ❌ not implemented |
+| TC-MBS-02 | §1 | Alternate photos | 🔴 not implemented |
+| TC-MBS-03 | §1 | Marketing videos | 🔴 not implemented |
+| TC-MBS-04 | §1 | 3D assets | 🔴 not implemented |
 | TC-MBS-05 | §1 | Media id / duplication | ⚠️ old scheme, duplicates |
 | TC-MBS-16 | §1 | **All** available media imported | ⚠️ feature photos only |
 | TC-MBS-06 | §2 | MiddleBy attributes as options | ✅ pass |
-| TC-MBS-07 | §2 | First 3 AQ groups + replace | ❌ not implemented |
+| TC-MBS-07 | §2 | First 3 AQ groups + replace | 🔴 not implemented |
 | TC-MBS-17 | §2 | The 7 named spec groups | ⚠️ gas OK on stage, **regression risk on dev** |
 | TC-MBS-08 | §3 | Only missing certifications | ✅ pass |
 | TC-MBS-09 | §3 | No AQ certifications | ✅ investigated — does not reproduce |
-| TC-MBS-10 | §4 | Warranty replacement | ❌ not implemented |
+| TC-MBS-10 | §4 | Warranty replacement | 🔴 not implemented |
 | TC-MBS-11 | §5 | MiddleBy documents imported | ✅ pass (3 types) |
 | TC-MBS-12 | §5 | Replace vs append | ⚠️ appends |
 | TC-MBS-18 | §5 | Per-type checklist of 5 types | ⚠️ 3 of 5 |

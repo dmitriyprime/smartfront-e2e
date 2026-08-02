@@ -1,0 +1,141 @@
+{
+  "info": {
+    "_postman_id": "b7f1c3e2-5a41-4d90-9c6e-0f2a8d1b4c77",
+    "name": "MiddleBy Product Catalog API",
+    "description": "Requests mirroring Modules/ImportMiddleBy/app/Services/MiddleByApiClient.php.\n\nSetup:\n1. Fill in `sub_key`, `client_id`, `client_secret` — take them from the project `.env` (MIDDLE_BY_*). Do NOT use the values from `.env.example`, they point at a different host and return 401.\n2. Run \"1. Generate token\" once — the post-response script stores `token` automatically.\n3. Run any other request.\n\nToken lifetime is returned in `expiresOn`; the app refreshes it 60s before expiry. Re-run request 1 when you get 401.\n\nThe API rate-limits with HTTP 429. The app retries 3 times with a 2s pause; Postman does not — just wait and retry.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://productcatalog.middlebyapps.com/api/v1",
+      "type": "default"
+    },
+    { "key": "sub_key", "value": "", "type": "secret" },
+    { "key": "client_id", "value": "", "type": "secret" },
+    { "key": "client_secret", "value": "", "type": "secret" },
+    { "key": "token", "value": "", "type": "secret" },
+    {
+      "key": "product_uuid",
+      "value": "829693a9-29c5-4e3a-abea-ff9697ab9fd0",
+      "type": "default",
+      "description": "Blodgett ZEPH-200-E ADDL — the worked example from middleby_task_13_07.md (FEDA product 611510)"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Generate token",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+              "",
+              "const data = pm.response.json();",
+              "",
+              "pm.test(\"accessToken present\", () => pm.expect(data.accessToken).to.be.a(\"string\").and.not.empty);",
+              "",
+              "// Write to the active environment when there is one — an environment variable",
+              "// shadows a collection variable of the same name, so writing only to the",
+              "// collection would leave {{token}} resolving to the empty environment value.",
+              "const scope = pm.environment.name ? pm.environment : pm.collectionVariables;",
+              "scope.set(\"token\", data.accessToken);",
+              "",
+              "console.log(\"token stored in\", pm.environment.name || \"collection\", \"| expiresOn:\", data.expiresOn);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Ocp-Apim-Subscription-Key", "value": "{{sub_key}}" },
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"clientId\": \"{{client_id}}\",\n  \"clientSecret\": \"{{client_secret}}\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/token/generate",
+          "host": ["{{base_url}}"],
+          "path": ["token", "generate"]
+        },
+        "description": "MiddleByApiClient::getToken(). Returns accessToken + expiresOn. The post-response script saves the token into the collection variable."
+      }
+    },
+    {
+      "name": "2. Get product by uuid",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Ocp-Apim-Subscription-Key", "value": "{{sub_key}}" },
+          { "key": "Accept", "value": "application/json" },
+          { "key": "X-Locale", "value": "en_US" },
+          { "key": "X-Channel", "value": "default" }
+        ],
+        "url": {
+          "raw": "{{base_url}}/products/{{product_uuid}}",
+          "host": ["{{base_url}}"],
+          "path": ["products", "{{product_uuid}}"]
+        },
+        "description": "MiddleByApiClient::getProduct().\n\nX-Locale and X-Channel are required — they are part of authHeaders() in the client, and the response can differ without them.\n\nResponse is ~60-70 KB. Useful things to look for:\n- `attributeGroup` — the group an attribute belongs to (e.g. warranty_and_disclaimers_attribute_group, weights_dimensions_attribute_group)\n- `\"attribute\": \"url\"` — media and document URLs (PhotoFeature / PhotoAlt / VideoFeature / specsheets / usermanuals / brochure / warrantysheet)"
+      }
+    },
+    {
+      "name": "3. Search products",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Ocp-Apim-Subscription-Key", "value": "{{sub_key}}" },
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Accept", "value": "application/json" },
+          { "key": "X-Locale", "value": "en_US" },
+          { "key": "X-Channel", "value": "default" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"offset\": 0,\n  \"limit\": 100,\n  \"sortBy\": \"1\",\n  \"orderBy\": \"brand\",\n  \"view\": \"list\",\n  \"search\": \"\",\n  \"category\": \"\",\n  \"fields\": [\n    \"identifier\",\n    \"brand\",\n    \"product_name\",\n    \"model\",\n    \"product_discontinued\"\n  ],\n  \"filters\": [\n    { \"field\": \"identifier\", \"operator\": \"iseq\", \"value\": \"P602HT\" },\n    { \"field\": \"brand\", \"operator\": \"iseq\", \"value\": \"Blodgett\" }\n  ]\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/products/search",
+          "host": ["{{base_url}}"],
+          "path": ["products", "search"]
+        },
+        "description": "MiddleByApiClient::getProductsList() / getProductMiddleByUuid().\n\nThis is exactly how the app resolves an AutoQuotes product to a MiddleBy uuid: first by `identifier` + `brand`, and if that misses, by `model` + `brand` with disambiguation on dimensions.\n\nOperators seen in the codebase:\n- `iseq` — case-insensitive equality\n- `nemp` — field is not empty (used with value \"\")\n\nReturns `{ data: [ { uuid, identifier, brand, ... } ] }`."
+      }
+    },
+    {
+      "name": "4. Search — whole brand",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Ocp-Apim-Subscription-Key", "value": "{{sub_key}}" },
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Accept", "value": "application/json" },
+          { "key": "X-Locale", "value": "en_US" },
+          { "key": "X-Channel", "value": "default" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"offset\": 0,\n  \"limit\": 100,\n  \"sortBy\": \"1\",\n  \"orderBy\": \"brand\",\n  \"view\": \"list\",\n  \"fields\": [\n    \"identifier\",\n    \"brand\",\n    \"product_name\",\n    \"model\"\n  ],\n  \"filters\": [\n    { \"field\": \"brand\", \"operator\": \"iseq\", \"value\": \"Blodgett\" }\n  ]\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/products/search",
+          "host": ["{{base_url}}"],
+          "path": ["products", "search"]
+        },
+        "description": "Paginate with `offset` / `limit` to walk a brand. Brand names must match the MiddleBy side of `autoquote_to_middleby_brands` (e.g. \"Blodgett\", \"Imperial\", \"BKI\", \"Anets\"), not the AutoQuotes vendor name."
+      }
+    }
+  ]
+}
